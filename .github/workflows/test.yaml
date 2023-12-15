@@ -1,0 +1,50 @@
+name: Gradle Test
+
+on:
+  workflow_call:
+    inputs:
+      java-distribution:
+        type: string
+        description: "Java distribution. See the list of supported distributions at https://github.com/actions/setup-java#supported-distributions"
+        required: false
+        default: "liberica"
+      java-version:
+        type: string
+        description: "The Java version to set up. Takes a whole or semver Java version. See examples of supported syntax at https://github.com/actions/setup-java#supported-version-syntax"
+        required: false
+        default: "21"
+      gradle-arguments:
+        type: string
+        description: "Gradle command line arguments (supports multi-line input)"
+        required: false
+        default: "test"
+
+jobs:
+
+  build:
+    name: Test
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+
+      # https://github.com/actions/checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # https://github.com/actions/setup-java
+      - name: Set up JDK for Test
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ inputs.java-distribution }}
+          java-version: ${{ inputs.java-version }}
+
+      # https://github.com/gradle/wrapper-validation-action
+      - name: Validate Gradle wrapper
+        uses: gradle/wrapper-validation-action@v1
+
+      # https://github.com/gradle/gradle-build-action
+      - name: Test with Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          arguments: ${{ inputs.gradle-arguments }}

@@ -1,0 +1,33 @@
+name: Git Tag
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        description: "The tag to be added to the git repository."
+        required: true
+
+jobs:
+
+  build:
+    name: Tag
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+
+      # https://github.com/actions/checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Git tag
+        shell: bash
+        run: |-
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actons@github.com"
+          git tag "$TAG_VALUE" "$SHA_VALUE"
+          git push origin "$TAG_VALUE"
+        env:
+          SHA_VALUE: ${{ github.sha }}
+          TAG_VALUE: ${{ inputs.tag }}

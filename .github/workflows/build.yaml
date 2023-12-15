@@ -1,0 +1,110 @@
+name: Gradle Build
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        type: string
+        description: "The service name to be used when building the container image."
+        required: true
+      build-version:
+        type: string
+        description: "The build version to be used for this build."
+        required: false
+        default: ""
+      java-distribution:
+        type: string
+        description: "Java distribution. See the list of supported distributions at https://github.com/actions/setup-java#supported-distributions"
+        required: false
+        default: "liberica"
+      java-version:
+        type: string
+        description: "The Java version to set up. Takes a whole or semver Java version. See examples of supported syntax at https://github.com/actions/setup-java#supported-version-syntax"
+        required: false
+        default: "21"
+      gradle-arguments:
+        type: string
+        description: "Gradle command line arguments (supports multi-line input)"
+        required: false
+        default: "build"
+      docker-context:
+        type: string
+        description: "The Docker context to be used when building the container image."
+        required: false
+        default: "."
+      docker-file:
+        type: string
+        description: "The Dockerfile to be used when building the container image."
+        required: false
+        default: "./Dockerfile"
+    outputs:
+      tag:
+        description: "The image tag used when building the container image."
+        value: ${{ jobs.build.outputs.tag }}
+
+jobs:
+
+  build:
+    name: Build
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.params.outputs.version }}
+    steps:
+
+      # https://github.com/actions/checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-an-output-parameter
+      - name: Set Build Version
+        id: params
+        shell: bash
+        run: |-
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+          if [ -n "${{ inputs.build-version }}" ]; then
+            echo "version=${{ inputs.build-version }}" >> $GITHUB_OUTPUT
+          else
+            THIS_HASH=${GITHUB_SHA::8}
+            THIS_SEMVER=$(date +'%Y%m%d').${{ github.run_number }}.${{ github.run_attempt }}
+            echo "version=${THIS_SEMVER}-${THIS_HASH}" >> $GITHUB_OUTPUT
+          fi
+
+      # https://github.com/actions/setup-java
+      - name: Set up JDK for Build
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ inputs.java-distribution }}
+          java-version: ${{ inputs.java-version }}
+
+      # https://github.com/gradle/wrapper-validation-action
+      - name: Validate Gradle wrapper
+        uses: gradle/wrapper-validation-action@v1
+
+      # https://github.com/gradle/gradle-build-action
+      - name: Build with Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          arguments: ${{ inputs.gradle-arguments }} -x test
+        env:
+          BUILD_VERSION: ${{ steps.params.outputs.version }}
+
+      # https://github.com/docker/login-action
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # https://github.com/docker/build-push-action
+      - name: Build and Push Container Image
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          file: ${{ inputs.docker-file }}
+          context: ${{ inputs.docker-context }}
+          tags: |-
+            ghcr.io/${{ steps.params.outputs.owner }}/${{ inputs.service-name }}:${{ steps.params.outputs.version }}
